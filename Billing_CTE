@@ -1,0 +1,1745 @@
+-- Create CTE within a script
+#BIlling V1 using Temp Tables. 
+
+# the process: Billingdetial > Alteryx(converted to BQ)>stores the output back to BQ Table.
+#1.IMP Things : ADJUST THE REGION and Time lineFOR 1st TEmp table 
+#2.Adjust the out put tables based on query >> create or replace table
+#3. Each Tool in the query indicats a filter in the work flow.
+#4.  For Any future changes need change the alteryx work flow and replacte the same tool in below query to aviod errors. 
+#5. Run time. (Approx: all the regions and approx 2years of time will be 2hours)
+
+#1. INPUT
+/*
+
+with input as (
+
+SELECT
+billing_system,  invoicing_country_code, calendar_date,
+ invoice_date, invoice_id, year_month, transaction_country_name,
+transaction_cluster,  transaction_region, customer_L1_code,
+customer_L1_name, imga, billing_cycle,  global_industry_indicator,  sf_country_parent_id,
+sf_country_parent_name, oracle_account_number,  oracle_account_name,
+ salesforce_billing_account, bill_code,  description,
+ product_id, product_summary_type, bill_code_data_source,
+ gl_account, gl_account_description, revenue_classification, currency,
+rate, SUM(quantity) as quantity, number_of_months,  SUM(amount) as amount,
+rate_USD, amount_USD, bill_code_sfdc, unit_of_measure,  storage_from_date,
+ storage_to_date,  original_invoice_id,
+ revenue_recognition_date, bill_in_advance_flag, bill_in_advance_month_number,
+revenue_recognition_amount, allocated_quantity
+
+ FROM irm-fin-acct-dp-prod.rpt_billing.billing_detail where
+(transaction_region = "NA")  AND calendar_date >= "2024-12-01" and
+calendar_date <= "2024-12-31" and revenue_classification
+="Storage" and product_summary_type = "Records Management"
+
+Group by ALL
+
+)
+
+
+SELECT 
+billing_system,  invoicing_country_code, calendar_date,
+ invoice_date, invoice_id, year_month, transaction_country_name,
+transaction_cluster,  transaction_region, customer_L1_code,
+customer_L1_name, imga, billing_cycle,  global_industry_indicator,  sf_country_parent_id,
+sf_country_parent_name, oracle_account_number,  oracle_account_name,
+ salesforce_billing_account, bill_code,  description,
+ product_id, product_summary_type, bill_code_data_source,
+ gl_account, gl_account_description, revenue_classification, currency,
+rate, SUM(quantity) as quantity, number_of_months,  SUM(amount) as amount,
+rate_USD, amount_USD, bill_code_sfdc, unit_of_measure,  storage_from_date,
+ storage_to_date,  original_invoice_id,
+ revenue_recognition_date, bill_in_advance_flag, bill_in_advance_month_number,
+revenue_recognition_amount, allocated_quantity
+
+FROM input
+WHERE description NOT IN ("STORAGE, DESTROYED", "STORAGE, WITHDRAWN")
+  AND NOT (description LIKE '%PW\'D%' OR description LIKE '%DEST%')
+  AND amount != 0;
+
+
+*/
+
+
+
+
+
+
+
+
+#2.ALTX WORK FLOW TO BQ
+
+
+
+
+ with input as (
+  SELECT 
+    billing_system, 
+    invoicing_country_code, 
+    calendar_date, 
+    invoice_date, 
+    invoice_id, 
+    year_month, 
+    transaction_country_name, 
+    transaction_cluster, 
+    transaction_region, 
+    customer_L1_code, 
+    customer_L1_name, 
+    imga, 
+    billing_cycle, 
+    global_industry_indicator, 
+    sf_country_parent_id, 
+    sf_country_parent_name, 
+    oracle_account_number, 
+    oracle_account_name, 
+    salesforce_billing_account, 
+    bill_code, 
+    description, 
+    product_id, 
+    product_summary_type, 
+    bill_code_data_source, 
+    gl_account, 
+    gl_account_description, 
+    revenue_classification, 
+    currency, 
+    rate, 
+    SUM(quantity) as quantity, 
+    number_of_months, 
+    SUM(amount) as amount, 
+    rate_USD, 
+    amount_USD, 
+    bill_code_sfdc, 
+    unit_of_measure, 
+    storage_from_date, 
+    storage_to_date, 
+    original_invoice_id, 
+    revenue_recognition_date, 
+    bill_in_advance_flag, 
+    bill_in_advance_month_number, 
+    revenue_recognition_amount, 
+    allocated_quantity 
+  FROM 
+    irm-fin-acct-dp-prod.rpt_billing.billing_detail
+  where 
+    (transaction_region = "NA") 
+    AND calendar_date >= "2024-12-01" 
+    and calendar_date <= "2024-12-31" 
+    and revenue_classification = "Storage" 
+    and product_summary_type = "Records Management" 
+  Group by 
+    ALL
+) 
+
+, inputtorename as (
+SELECT 
+  billing_system, 
+  invoicing_country_code, 
+  calendar_date, 
+  invoice_date as Date, 
+  invoice_id as `INV #`, 
+  year_month AS `Year & Month`, 
+  transaction_country_name as Country, 
+  transaction_cluster as Cluster, 
+  transaction_region as Region, 
+  customer_L1_code as `Cust ID`, 
+  customer_L1_name as `Customer Name`, 
+  imga as IMGA, 
+  --billing_cycle, 
+  global_industry_indicator as GI, 
+  sf_country_parent_id, 
+  sf_country_parent_name, 
+  oracle_account_number as `Oracle ID`, 
+  -- oracle_account_name, 
+  salesforce_billing_account, 
+  bill_code as `Bill Code`, 
+  description as Description, 
+  product_id as Product, 
+  product_summary_type as `Business Line`, 
+  bill_code_data_source, 
+  gl_account as `GL Account`, 
+  gl_account_description as`Service Type`, 
+  revenue_classification as `Rev Class`, 
+  currency, 
+  rate, 
+  quantity as Activity, 
+  number_of_months as `Number of Storage Months`, 
+  amount as Spend, 
+  rate_USD, 
+  amount_USD, 
+  --bill_code_sfdc, 
+  unit_of_measure, 
+  storage_from_date as `Storage Start Date`, 
+  storage_to_date as `Storage End Date`, 
+  original_invoice_id as `Original #INV`, 
+  revenue_recognition_date as `Revenue Recognition Date`, 
+  bill_in_advance_flag as `Bill in Advance`, 
+  bill_in_advance_month_number as `Bill in Advance month number`, 
+  revenue_recognition_amount as `Revenue Recognition Amount`, 
+--  allocated_quantity 
+FROM 
+  input 
+WHERE 
+  description NOT IN (
+    "STORAGE, DESTROYED", "STORAGE, WITHDRAWN"
+  ) 
+  AND NOT (
+    description LIKE '%PW\'D%' 
+    OR description LIKE '%DEST%'
+  ) 
+  AND amount != 0
+)
+,
+joincustomeranchorJ as
+(
+SELECT * 
+FROM inputtorename
+WHERE `Oracle ID` IN (
+'01222.0AL162', '01102.0110UT', '01222.0C271F', '01111.0S458M', '01222.0CF284', '01146.022WHX', '01146.023CCF', '01146.0295BH', '01146.0BY300', '01146.0BY903', '01146.0FLEXE', '01222.0CSS5T', '01146.0N228P', '01222.0CSSOT', '01146.0SQ13F', '01151.03023D', '01151.03403D', '01151.0CD376', '01151.0CN524', '01222.022G4M', '01222.022Z4P', '01222.026FJZ', '01222.028S5F', '01222.029JKM', '01222.029SG8', '01222.09LA73', '01102.0UT255', '01111.0S438M', '01111.0SMC30', '01222.0L2076', '01222.0L3250', '01146.029J7S', '01146.0BU177', '01146.0SJF73', '01151.0CW828', '01222.0L7599', '01222.0L7875', '01222.0L7958', '01111.0TT069', '01222.0L9798', '01151.0282CD', '01222.025PNC', '01222.028S2H', '01146.0253RT', '01322.0245RG', '01222.0LU214', '01146.024PZB', '01146.0S711J', '02223.023BTV', '01324.0TS656', '01332.02B63J', '02211.022VB6', '02211.022WVK', '02211.023R49', '01341.0NM993', '01412.0W1335', '01412.0W6509', '02211.0CSPMK', '01422.0POR03', '01422.0W5496', '02003.01557M', '02003.0186VS', '02003.0356MF', '02003.0583PP', '02003.09108P', '02003.0PP982', '02211.0P076P', '01322.027VN5', '01322.0A3820', '02211.0P2430', '01322.0A4421', '02211.0P3565', '02211.0P3580', '02211.0P3617', '02211.0P3636', '01332.0SY337', '01332.0SY818', '02211.0P544G', '01332.0SY953', '01412.0W1395', '01412.0WA290', '02211.0PA681', '02211.0PB492', '02211.0PB524', '02211.0PC437', '01322.0A3624', '01322.0A4970', '02211.0PE244', '01332.0SD653', '01332.0SH024', '01412.029HSR', '01422.02P359', '02211.0PHLPH', '02211.0PI717', '02223.022XXC', '02301.0B5006', '02301.0B5236', '02301.0B677B', '02301.0B7485', '02301.0B753K', '02223.0AYVMA', '02223.0LH274', '02301.0B993K', '02301.0BRRXA', '02301.0BSR68', '02223.0N2779', '02301.0CSB6D', '02223.0NG081', '02223.0NG143', '02301.0CSBN0', '02223.0NG438', '02301.0CSBPR', '02223.0OB934', '02242.0298H9', '02242.0C4808', '02301.01B551', '03121.0248LF', '02301.026HT3', '03121.0277WH', '02301.027FCK', '02301.027L8B', '03121.027N4K', '03121.027VLV', '03121.0296V9', '02301.028MLR', '03121.029JXN', '02301.08654N', '02301.0B2091', '02301.0B283K', '02301.0B298B', '02301.0B416K', '02301.0B4438', '02301.0B5458', '02223.0N2496', '02223.0N3698', '03121.0CHIRC', '02223.0NG447', '03121.0G0570', '03121.0G0980', '02242.0CC811', '02242.0CYMAR', '02301.023CRL', '02301.026VXZ', '02301.0B0672', '03121.0G2708', '03121.0G3206', '02301.0B2537', '02223.024B7J', '03121.0G7448', '04112.025H8G', '03121.0GK506', '03201.0LQ187', '03211.023D7P', '03211.0K327C', '03211.0K690C', '03121.0RCM34', '03221.024G8V', '03221.0CI041', '03221.0CI301', '03221.0CIA07', '03221.0CIM25', '03231.0NB403', '03241.022X3J', '03134.02279T', '03134.029JJ3', '03241.028T4J', '03134.0M363N', '03134.0M702N', '03134.0MN391', '03134.0MN615', '03141.0255MV', '03141.0D2T5H', '03242.0I0419', '03242.0I0623', '03251.023B4C', '03251.0IN817', '03311.0DVRCJ', '03311.0RC219', '03311.0RC289', '03311.0RC971', '03122.022XWC', '03122.025JGD', '03313.0SU273', '03122.0DS563', '03314.0BF541', '04102.0DV7NK', '04102.0DVBFK', '04102.0DVMFK', '04102.0KY06A', '04102.0KY437', '04104.0100NK', '03122.0DS297', '04104.0NK919', '04105.028MBX', '03141.025D5G', '03141.0DN987', '03121.0PK4HN', '04107.0RZ056', '04109.0278RG', '03134.0MN724', '03141.022CHB', '04109.0TN164', '04110.0MT270', '04112.022JS7', '04221.02565N', '04112.029KLW', '04221.025NT9', '04221.028MP8', '04221.0361IS', '04221.0485IS', '04221.0510IS', '04221.0560IS', '04112.0X1985', '04221.0941IS', '04112.0X3130', '04221.0B5258', '04112.0XK818', '04112.0Z0273', '04117.029JPF', '04117.0LN597', '04221.0K203M', '04221.0LBPRJ', '04119.023T2M', '04221.0M0156', '04221.0M0377', '04221.0M0518', '04221.0M057K', '04125.0CM215', '04125.0CM244', '04221.0M1733', '04127.0BLRMC', '04221.0M1938', '04221.0M1988', '04221.00V411', '04221.00V479', '04221.0111MQ', '04221.0M2369', '04221.0223IS', '04221.023XB9', '04221.0M3049', '04112.0X2119', '04221.0M3626', '04221.0M3843', '04221.0M3989', '04221.0M4368', '04221.0M5788', '04221.0M723K', '04221.0M816K', '04116.0Z6096', '04116.0ZUIXX', '04221.0MQ365', '04221.0MQ629', '04126.0SN034', '04221.02464J', '04221.0V475K', '04221.0VA292', '04221.0VA2GM', '04221.0VC59K', '04311.01BH03', '04119.0AR575', '04311.024RJ7', '04221.0145MQ', '04221.0223DG', '04311.0279LP', '04120.025JD9', '04311.0H5271', '04311.0H7214', '04311.0H7569', '04314.027J59', '04314.0AF776', '04412.0R453L', '04412.0R532M', '04322.0279PB', '04412.0RL936', '04322.0D3069', '04322.0D7452', '04322.0D7812', '04426.029D8B', '04331.0SA212', '04311.0H6997', '04311.0H8073', '04311.0H9149', '04322.0D3413', '04426.0FS199', '04322.0IT109', '04426.0FW761', '04331.0SA704', '04311.0H7500', '04311.0H8181', '04322.0279MZ', '04411.0142SR', '04411.0252ZB', '07140.02B2V3', '07150.029KGT', '07721.010721', '07140.0NR895', '07213.0N4T4R', '07213.024H4M', '07213.0257KN', '07213.029TVB', '07213.0AT573', '07213.0N7G2R', '07213.0CSJYW', '07213.0DLVRR', '07213.0J0079', '07213.0J6943', '07213.0J7838', '07213.0J7975', '07213.0J8039', '07213.0J8951', '07213.0JQ7MR', '07213.0JQ8LZ', '07213.0TR0KT', '07213.0TR0RC', '07213.027FBB', '07213.028MMF', '07213.02B29V', '07213.0J2873', '07330.0MG198', '07213.0J6429', '07344.026VR2', '07415.00Z720', '07415.020161', '07213.0255SZ', '07213.027V7T', '07430.0CSEEI', '07213.0FLWSP', '07213.0J2594', '07433.0259DW', '07213.0J7792', '07433.027B3R', '07213.0J9182', '07433.029WNB', '07433.0RPM13', '07213.02B69K', '07213.0J5146', '07213.0JQ9BY', '07530.0IF496', '07213.029RJP', '07722.025XBR', '07722.0265N5', '60084.0IMD43', '07731.025G3D', '07731.082700', '07731.083100', '07731.088525', '07731.089309', '07731.089324', '07731.089427', '07731.0CRA00', '07731.0SCT6L', '07731.0RTC4R', '07741.022ZXL', '07741.0299ZW', '07741.029FMG', '07741.0FLEXC', '07741.0SC7IO', '07741.0V0660', '07741.0V1071', '07721.09167H', '07722.0SC5II', '07724.0M9998', '07741.0V8988', '07731.022X84', '07731.024CPP', '07731.029P85', '07731.080915', '07742.022VSV', '07742.02345F', '07742.027DXV', '07742.027T4Z', '07731.089604', '07742.0C9054', '07743.025LHP', '07731.023HR8', '07731.083139', '07731.083728', '07731.0CCA81', '07731.089377', '07762.00NGCN', '07805.0RS071', '33115.050589', '44139.028NLD'
+)
+)
+,
+joincustomeranchorl as
+(
+SELECT * 
+FROM inputtorename
+WHERE `Oracle ID` NOT IN (
+'01222.0AL162', '01102.0110UT', '01222.0C271F', '01111.0S458M', '01222.0CF284', '01146.022WHX', '01146.023CCF', '01146.0295BH', '01146.0BY300', '01146.0BY903', '01146.0FLEXE', '01222.0CSS5T', '01146.0N228P', '01222.0CSSOT', '01146.0SQ13F', '01151.03023D', '01151.03403D', '01151.0CD376', '01151.0CN524', '01222.022G4M', '01222.022Z4P', '01222.026FJZ', '01222.028S5F', '01222.029JKM', '01222.029SG8', '01222.09LA73', '01102.0UT255', '01111.0S438M', '01111.0SMC30', '01222.0L2076', '01222.0L3250', '01146.029J7S', '01146.0BU177', '01146.0SJF73', '01151.0CW828', '01222.0L7599', '01222.0L7875', '01222.0L7958', '01111.0TT069', '01222.0L9798', '01151.0282CD', '01222.025PNC', '01222.028S2H', '01146.0253RT', '01322.0245RG', '01222.0LU214', '01146.024PZB', '01146.0S711J', '02223.023BTV', '01324.0TS656', '01332.02B63J', '02211.022VB6', '02211.022WVK', '02211.023R49', '01341.0NM993', '01412.0W1335', '01412.0W6509', '02211.0CSPMK', '01422.0POR03', '01422.0W5496', '02003.01557M', '02003.0186VS', '02003.0356MF', '02003.0583PP', '02003.09108P', '02003.0PP982', '02211.0P076P', '01322.027VN5', '01322.0A3820', '02211.0P2430', '01322.0A4421', '02211.0P3565', '02211.0P3580', '02211.0P3617', '02211.0P3636', '01332.0SY337', '01332.0SY818', '02211.0P544G', '01332.0SY953', '01412.0W1395', '01412.0WA290', '02211.0PA681', '02211.0PB492', '02211.0PB524', '02211.0PC437', '01322.0A3624', '01322.0A4970', '02211.0PE244', '01332.0SD653', '01332.0SH024', '01412.029HSR', '01422.02P359', '02211.0PHLPH', '02211.0PI717', '02223.022XXC', '02301.0B5006', '02301.0B5236', '02301.0B677B', '02301.0B7485', '02301.0B753K', '02223.0AYVMA', '02223.0LH274', '02301.0B993K', '02301.0BRRXA', '02301.0BSR68', '02223.0N2779', '02301.0CSB6D', '02223.0NG081', '02223.0NG143', '02301.0CSBN0', '02223.0NG438', '02301.0CSBPR', '02223.0OB934', '02242.0298H9', '02242.0C4808', '02301.01B551', '03121.0248LF', '02301.026HT3', '03121.0277WH', '02301.027FCK', '02301.027L8B', '03121.027N4K', '03121.027VLV', '03121.0296V9', '02301.028MLR', '03121.029JXN', '02301.08654N', '02301.0B2091', '02301.0B283K', '02301.0B298B', '02301.0B416K', '02301.0B4438', '02301.0B5458', '02223.0N2496', '02223.0N3698', '03121.0CHIRC', '02223.0NG447', '03121.0G0570', '03121.0G0980', '02242.0CC811', '02242.0CYMAR', '02301.023CRL', '02301.026VXZ', '02301.0B0672', '03121.0G2708', '03121.0G3206', '02301.0B2537', '02223.024B7J', '03121.0G7448', '04112.025H8G', '03121.0GK506', '03201.0LQ187', '03211.023D7P', '03211.0K327C', '03211.0K690C', '03121.0RCM34', '03221.024G8V', '03221.0CI041', '03221.0CI301', '03221.0CIA07', '03221.0CIM25', '03231.0NB403', '03241.022X3J', '03134.02279T', '03134.029JJ3', '03241.028T4J', '03134.0M363N', '03134.0M702N', '03134.0MN391', '03134.0MN615', '03141.0255MV', '03141.0D2T5H', '03242.0I0419', '03242.0I0623', '03251.023B4C', '03251.0IN817', '03311.0DVRCJ', '03311.0RC219', '03311.0RC289', '03311.0RC971', '03122.022XWC', '03122.025JGD', '03313.0SU273', '03122.0DS563', '03314.0BF541', '04102.0DV7NK', '04102.0DVBFK', '04102.0DVMFK', '04102.0KY06A', '04102.0KY437', '04104.0100NK', '03122.0DS297', '04104.0NK919', '04105.028MBX', '03141.025D5G', '03141.0DN987', '03121.0PK4HN', '04107.0RZ056', '04109.0278RG', '03134.0MN724', '03141.022CHB', '04109.0TN164', '04110.0MT270', '04112.022JS7', '04221.02565N', '04112.029KLW', '04221.025NT9', '04221.028MP8', '04221.0361IS', '04221.0485IS', '04221.0510IS', '04221.0560IS', '04112.0X1985', '04221.0941IS', '04112.0X3130', '04221.0B5258', '04112.0XK818', '04112.0Z0273', '04117.029JPF', '04117.0LN597', '04221.0K203M', '04221.0LBPRJ', '04119.023T2M', '04221.0M0156', '04221.0M0377', '04221.0M0518', '04221.0M057K', '04125.0CM215', '04125.0CM244', '04221.0M1733', '04127.0BLRMC', '04221.0M1938', '04221.0M1988', '04221.00V411', '04221.00V479', '04221.0111MQ', '04221.0M2369', '04221.0223IS', '04221.023XB9', '04221.0M3049', '04112.0X2119', '04221.0M3626', '04221.0M3843', '04221.0M3989', '04221.0M4368', '04221.0M5788', '04221.0M723K', '04221.0M816K', '04116.0Z6096', '04116.0ZUIXX', '04221.0MQ365', '04221.0MQ629', '04126.0SN034', '04221.02464J', '04221.0V475K', '04221.0VA292', '04221.0VA2GM', '04221.0VC59K', '04311.01BH03', '04119.0AR575', '04311.024RJ7', '04221.0145MQ', '04221.0223DG', '04311.0279LP', '04120.025JD9', '04311.0H5271', '04311.0H7214', '04311.0H7569', '04314.027J59', '04314.0AF776', '04412.0R453L', '04412.0R532M', '04322.0279PB', '04412.0RL936', '04322.0D3069', '04322.0D7452', '04322.0D7812', '04426.029D8B', '04331.0SA212', '04311.0H6997', '04311.0H8073', '04311.0H9149', '04322.0D3413', '04426.0FS199', '04322.0IT109', '04426.0FW761', '04331.0SA704', '04311.0H7500', '04311.0H8181', '04322.0279MZ', '04411.0142SR', '04411.0252ZB', '07140.02B2V3', '07150.029KGT', '07721.010721', '07140.0NR895', '07213.0N4T4R', '07213.024H4M', '07213.0257KN', '07213.029TVB', '07213.0AT573', '07213.0N7G2R', '07213.0CSJYW', '07213.0DLVRR', '07213.0J0079', '07213.0J6943', '07213.0J7838', '07213.0J7975', '07213.0J8039', '07213.0J8951', '07213.0JQ7MR', '07213.0JQ8LZ', '07213.0TR0KT', '07213.0TR0RC', '07213.027FBB', '07213.028MMF', '07213.02B29V', '07213.0J2873', '07330.0MG198', '07213.0J6429', '07344.026VR2', '07415.00Z720', '07415.020161', '07213.0255SZ', '07213.027V7T', '07430.0CSEEI', '07213.0FLWSP', '07213.0J2594', '07433.0259DW', '07213.0J7792', '07433.027B3R', '07213.0J9182', '07433.029WNB', '07433.0RPM13', '07213.02B69K', '07213.0J5146', '07213.0JQ9BY', '07530.0IF496', '07213.029RJP', '07722.025XBR', '07722.0265N5', '60084.0IMD43', '07731.025G3D', '07731.082700', '07731.083100', '07731.088525', '07731.089309', '07731.089324', '07731.089427', '07731.0CRA00', '07731.0SCT6L', '07731.0RTC4R', '07741.022ZXL', '07741.0299ZW', '07741.029FMG', '07741.0FLEXC', '07741.0SC7IO', '07741.0V0660', '07741.0V1071', '07721.09167H', '07722.0SC5II', '07724.0M9998', '07741.0V8988', '07731.022X84', '07731.024CPP', '07731.029P85', '07731.080915', '07742.022VSV', '07742.02345F', '07742.027DXV', '07742.027T4Z', '07731.089604', '07742.0C9054', '07743.025LHP', '07731.023HR8', '07731.083139', '07731.083728', '07731.0CCA81', '07731.089377', '07762.00NGCN', '07805.0RS071', '33115.050589', '44139.028NLD'
+)
+)
+,
+updatecountryvaluestojoincustomeranchorl as (
+select 
+*,
+-- if [Country] = "US" then "United States" else [Country] endif
+CASE WHEN joincustomeranchorl.Country = "US" then "United States" else joincustomeranchorl.Country end as CountryNew
+from joincustomeranchorl
+)
+,
+outputtoNACUSTOMERNAMECSV as(
+select 
+billing_system,
+invoicing_country_code,
+calendar_date,
+Date,
+`INV #`,
+`Year & Month`,
+-- Country,
+CountryNew as Country,
+Cluster,
+Region,
+`Cust ID`,
+`Customer Name`,
+IMGA,
+GI,
+sf_country_parent_id,
+sf_country_parent_name,
+`Oracle ID`,
+salesforce_billing_account,
+`Bill Code`,
+Description,
+Product,
+`Business Line`,
+bill_code_data_source,
+`GL Account`,
+`Service Type`,
+`Rev Class`,
+currency,
+rate,
+Activity,
+`Number of Storage Months`,
+Spend,
+rate_USD,
+amount_USD,
+unit_of_measure,
+`Storage Start Date`,
+`Storage End Date`,
+`Original #INV`,
+`Revenue Recognition Date`,
+`Bill in Advance`,
+`Bill in Advance month number`,
+`Revenue Recognition Amount`
+ from updatecountryvaluestojoincustomeranchorl
+)
+,
+AggoutputtoNACUSTOMERNAMECSV as (
+
+SELECT 
+  Country, 
+  `Cust ID`, 
+  `Oracle ID`, 
+  LAST_VALUE(`Customer Name`) OVER (
+    PARTITION BY Country, `Cust ID`, `Oracle ID` 
+    ORDER BY `Customer Name` ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  ) AS Customer_Name
+FROM outputtoNACUSTOMERNAMECSV
+)
+
+--/////////////////////////////////////////////////////////////////////////////////////////////
+------------------------ Output to NA CUSTOMER NAME CSV ---------------------------------------
+
+-- select * from AggoutputtoNACUSTOMERNAMECSV
+
+-----------------------------------------------------------------------------------------------
+--/////////////////////////////////////////////////////////////////////////////////////////////
+,
+CreateCycleColumnTojoincustomeranchorJ as (
+
+SELECT *, 
+       "W&L" AS Cycle
+FROM joincustomeranchorJ
+)
+
+-- select * from CreateCycleColumnTojoincustomeranchorJ
+,
+filteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV as (
+select * from outputtoNACUSTOMERNAMECSV
+where outputtoNACUSTOMERNAMECSV.Spend < 0
+)
+,
+AggfilteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV as (
+select `Year & Month`, `Cust Id`, (-1 * Spend) as Spend, count(Spend) as Count
+from filteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV
+group by `Year & Month`, `Cust Id`, Spend
+)
+,
+filteredSpendNotLessThanZeroTooutputtoNACUSTOMERNAMECSV as (
+select * from outputtoNACUSTOMERNAMECSV
+where outputtoNACUSTOMERNAMECSV.Spend >= 0
+)
+,
+CreditsAndRebillsJoinAnchorJ as(
+select
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+b.count
+from filteredSpendNotLessThanZeroTooutputtoNACUSTOMERNAMECSV a
+inner join AggfilteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV b
+on a.`Year & Month` = b.`Year & Month` and
+   a.`Cust Id` = b.`Cust Id` and
+   a.Spend = b.Spend
+order by a.`Year & Month` asc, a.`Cust Id` asc, a.calendar_date asc, a.Spend asc  
+)
+,
+CreditsAndRebillsJoinAnchorL as(
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+b.count
+from filteredSpendNotLessThanZeroTooutputtoNACUSTOMERNAMECSV a
+Left join AggfilteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV b
+on a.`Year & Month` <> b.`Year & Month` and
+   a.`Cust Id` <> b.`Cust Id` and
+   a.Spend <> b.Spend
+--where b.`Year & Month` is NULL AND b.`Cust Id` IS NULL AND b.Spend IS null
+)
+
+,
+updatedTileDebitsAsCycleLessThanCounttoCreditsAndRebillsJoinAnchorJ as (
+SELECT 
+    *,
+    DENSE_RANK() OVER (ORDER BY `Year & Month`) AS Tile_Num,
+    ROW_NUMBER() OVER (PARTITION BY `Year & Month` ORDER BY `Year & Month` ) AS Tile_Sequence_Num,
+    "Debits" as Cycle
+FROM 
+    CreditsAndRebillsJoinAnchorJ
+    qualify ROW_NUMBER() OVER (PARTITION BY `Year & Month` ORDER BY `Year & Month` ) <= CreditsAndRebillsJoinAnchorJ.count
+)
+,
+updatedTileDebitsAsCycleGreaterThanCounttoCreditsAndRebillsJoinAnchorJ as (
+SELECT 
+    *,
+    DENSE_RANK() OVER (ORDER BY `Year & Month`) AS Tile_Num,
+    ROW_NUMBER() OVER (PARTITION BY `Year & Month` ORDER BY `Year & Month` ) AS Tile_Sequence_Num
+FROM 
+    CreditsAndRebillsJoinAnchorJ
+    qualify ROW_NUMBER() OVER (PARTITION BY `Year & Month` ORDER BY `Year & Month` ) > CreditsAndRebillsJoinAnchorJ.count
+)
+
+
+-- select * from updatedTileDebitsAsCycleGreaterThanCounttoCreditsAndRebillsJoinAnchorJ
+-- select * from updatedTileDebitsAsCycleLessThanCounttoCreditsAndRebillsJoinAnchorJ
+
+
+,
+RemovedTieLogicFieldsToupdatedTileDebitsAsCycleLessThanCounttoCreditsAndRebillsJoinAnchorJ as (
+select 
+billing_system,
+invoicing_country_code,
+calendar_date,
+Date,
+`INV #`,
+`Year & Month`,
+Country,
+Cluster,
+Region,
+`Cust ID`,
+`Customer Name`,
+IMGA,
+GI,
+sf_country_parent_id,
+sf_country_parent_name,
+`Oracle ID`,
+salesforce_billing_account,
+`Bill Code`,
+Description,
+Product,
+`Business Line`,
+bill_code_data_source,
+`GL Account`,
+`Service Type`,
+`Rev Class`,
+currency,
+rate,
+Activity,
+`Number of Storage Months`,
+Spend,
+rate_USD,
+amount_USD,
+unit_of_measure,
+`Storage Start Date`,
+`Storage End Date`,
+`Original #INV`,
+`Revenue Recognition Date`,
+`Bill in Advance`,
+`Bill in Advance month number`,
+`Revenue Recognition Amount`,
+Cycle
+from updatedTileDebitsAsCycleLessThanCounttoCreditsAndRebillsJoinAnchorJ a
+
+)
+
+,
+UpdateCreditstoCycleTofilteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV as (
+select *, "Credits" as Cycle from filteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV
+)
+,
+UnionNACreaditAndDebits as (
+select * from UpdateCreditstoCycleTofilteredSpendLessThanZeroTooutputtoNACUSTOMERNAMECSV
+
+union all 
+
+select * from RemovedTieLogicFieldsToupdatedTileDebitsAsCycleLessThanCounttoCreditsAndRebillsJoinAnchorJ
+)
+,
+OutputAggUnionNACreaditAndDebits as 
+(
+select 
+Cycle, calendar_date as `Transaction Date`, Country, `Cust ID`, `Oracle ID`,`Customer Name`, sum(Spend) as Amount
+
+/*
+billing_system,
+invoicing_country_code,
+calendar_date as `Transaction Date`,
+Date,
+`INV #`,
+`Year & Month`,
+Country,
+Cluster,
+Region,
+`Cust ID`,
+`Customer Name`,
+IMGA,
+GI,
+sf_country_parent_id,
+sf_country_parent_name,
+`Oracle ID`,
+salesforce_billing_account,
+`Bill Code`,
+Description,
+Product,
+`Business Line`,
+bill_code_data_source,
+`GL Account`,
+`Service Type`,
+`Rev Class`,
+currency,
+rate,
+Activity,
+`Number of Storage Months`,
+Spend,
+rate_USD,
+amount_USD,
+unit_of_measure,
+`Storage Start Date`,
+`Storage End Date`,
+`Original #INV`,
+`Revenue Recognition Date`,
+`Bill in Advance`,
+`Bill in Advance month number`,
+`Revenue Recognition Amount`,
+Cycle
+
+*/
+
+from 
+UnionNACreaditAndDebits
+group by Cycle, calendar_date, Country, `Cust ID`, `Oracle ID`,`Customer Name`
+
+)
+
+--/////////////////////////////////////////////////////////////////////////////////////////////
+------------------------ Output to NA DEBITS & CREDITS CSV ---------------------------------------
+
+-- select * from OutputAggUnionNACreaditAndDebits
+
+-----------------------------------------------------------------------------------------------
+--/////////////////////////////////////////////////////////////////////////////////////////////
+
+
+,
+ToolUnion66 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+from RemovedTieLogicFieldsToupdatedTileDebitsAsCycleLessThanCounttoCreditsAndRebillsJoinAnchorJ a
+
+union all
+
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+from CreditsAndRebillsJoinAnchorL a
+)
+,
+FormulaTool278 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+--a.Activity,
+CASE 
+    WHEN a.Activity = 0 AND a.Spend = 0 THEN 0
+    WHEN a.Activity = 0 OR a.Activity IS NULL THEN 1
+    ELSE a.Activity 
+END AS Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount` 
+from ToolUnion66 a
+)
+,
+FormulaTool277 as 
+(
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+--a.rate,
+CASE 
+    WHEN a.Activity IS NOT NULL AND a.Activity != 0 THEN a.Spend / a.Activity
+    ELSE NULL 
+END AS rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+from FormulaTool278 a
+)
+,
+FormulaTool276 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+--a.`Bill Code`,
+LTRIM(a.`Bill Code`, '0') AS `Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+
+from FormulaTool277 a
+)
+,
+FormulaTool275 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+-- a.`Number of Storage Months`,
+CASE 
+    WHEN a.`Number of Storage Months` IS NULL THEN 1
+    --WHEN a.`Number of Storage Months` = '' THEN 1
+    WHEN a.`Number of Storage Months` = 0 THEN 1
+    ELSE a.`Number of Storage Months`
+END AS `Number of Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+from FormulaTool276 a
+)
+,
+FormulaTool274 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+a.`Number of Storage Months`,
+a.`Number of Storage Months` as `Velocity Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+-- a.`Storage Start Date`,
+CASE 
+    WHEN a.`Storage Start Date` IS NULL THEN a.`Revenue Recognition Date`
+    ELSE a.`Storage Start Date`
+END AS `Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+from FormulaTool275 a
+)
+,
+UnionTool20AnchorJ as (
+select  *, "" as Cycle from FormulaTool274
+where `Bill Code` in ('890', '3471', '3475', '5790', '1891', '5760', '3485', '1893', '3470', '880', '1894', '3488', '1892', '3483', '3473', '5799', '3491', '3472', '1896', '5759', '3489', '3512', '3482', '3139', '3492', '3487', '3478', '3490', '1895', '3513', '3486', '3383', '3514', '3474', '5780', '944', '459', '3481', '463', '460', '7848', '7908', '3484', '8832', '8848', '947', '909', '7548', '7584', '5621', '881', '7512', '923', '3511', '7032', '7840', '6470', '471', '8836', '9064', '1883', '5132', '7476', '8884', '1881', '7440', '930', '8578', '8904', '7920', '5577', '8908', '6458', '9080', '5598', '7872', '8590', '5358', '8382', '6918', '7836', '8876', '5792', '7056', '8238', '8996', '8900', '9020', '5584', '1882', '8804', '8589', '6934', '1884', '5688', '6664', '7900', '3037', '8880', '8952', '7896', '8812', '5130', '6620', '8896', '9040', '9008', '7800', '7864', '7884', '9936', '8808', '9024', '8824', '8860', '8920', '8944', '7828', '7728', '6420', '8956', '7860', '8594', '8948', '8984', '7956', '7580', '6676', '6640', '8840', '9622', '8888', '8964', '8940', '9634', '6764', '7844', '7504', '6708', '5350', '8852', '7892', '7832', '6424', '8820', '6466', '7888', '7764', '7856', '7200', '7852', '7432', '7252', '7264', '7612'
+)
+)
+,
+UnionTool20AnchorL as (
+select  *, "Check" as Cycle from FormulaTool274
+where `Bill Code` not in ('890', '3471', '3475', '5790', '1891', '5760', '3485', '1893', '3470', '880', '1894', '3488', '1892', '3483', '3473', '5799', '3491', '3472', '1896', '5759', '3489', '3512', '3482', '3139', '3492', '3487', '3478', '3490', '1895', '3513', '3486', '3383', '3514', '3474', '5780', '944', '459', '3481', '463', '460', '7848', '7908', '3484', '8832', '8848', '947', '909', '7548', '7584', '5621', '881', '7512', '923', '3511', '7032', '7840', '6470', '471', '8836', '9064', '1883', '5132', '7476', '8884', '1881', '7440', '930', '8578', '8904', '7920', '5577', '8908', '6458', '9080', '5598', '7872', '8590', '5358', '8382', '6918', '7836', '8876', '5792', '7056', '8238', '8996', '8900', '9020', '5584', '1882', '8804', '8589', '6934', '1884', '5688', '6664', '7900', '3037', '8880', '8952', '7896', '8812', '5130', '6620', '8896', '9040', '9008', '7800', '7864', '7884', '9936', '8808', '9024', '8824', '8860', '8920', '8944', '7828', '7728', '6420', '8956', '7860', '8594', '8948', '8984', '7956', '7580', '6676', '6640', '8840', '9622', '8888', '8964', '8940', '9634', '6764', '7844', '7504', '6708', '5350', '8852', '7892', '7832', '6424', '8820', '6466', '7888', '7764', '7856', '7200', '7852', '7432', '7252', '7264', '7612'
+)
+)
+,
+UnionTool74 as(
+select * from UnionTool20AnchorJ
+
+union all
+
+select * from UnionTool20AnchorL
+)
+,
+JoinTool119 as
+(
+select
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.`Velocity Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+a.Cycle,
+b.Standard,
+b.QAA,
+b.SA,
+b.AAA
+
+from UnionTool74 a
+inner join irm-fin-acct-dp-prod.Etl_alt_BQ.PxQ_Max b on a.Country = b.Country
+)
+,
+FormulaTool120 as(
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.`Velocity Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+--a.Cycle,
+CASE 
+    WHEN a.Cycle = "Fixed" THEN "Fixed"
+    WHEN a.rate > a.Standard AND a.`Velocity Storage Months` <= 1 THEN "Fixed"
+    WHEN a.rate > a.QAA AND a.`Velocity Storage Months` <= 3 AND a.`Velocity Storage Months` > 1 THEN "Fixed"
+    WHEN a.rate > a.SA AND a.`Velocity Storage Months` <= 6 AND a.`Velocity Storage Months` > 3 THEN "Fixed"
+    WHEN a.rate > a.AAA AND a.`Velocity Storage Months` <= 12 AND a.`Velocity Storage Months` > 6 THEN "Fixed"
+    WHEN a.`Velocity Storage Months` = 3 THEN "QAA"
+    WHEN a.`Velocity Storage Months` = 2 THEN "2AA"
+    WHEN a.`Velocity Storage Months` = 4 THEN "4AA"
+    WHEN a.`Velocity Storage Months` = 5 THEN "5AA"
+    WHEN a.`Velocity Storage Months` = 6 THEN "SA"
+    WHEN a.`Velocity Storage Months` = 7 THEN "7AA"
+    WHEN a.`Velocity Storage Months` = 8 THEN "8AA"
+    WHEN a.`Velocity Storage Months` = 9 THEN "9AA"
+    WHEN a.`Velocity Storage Months` = 10 THEN "10AA"
+    WHEN a.`Velocity Storage Months` = 11 THEN "11AA"
+    WHEN a.`Velocity Storage Months` = 12 THEN "AAA"
+    ELSE "PxQ"
+END AS Cycle,
+a.Standard,
+a.QAA,
+a.SA,
+a.AAA
+from JoinTool119 a
+)
+,
+FormulaTool39 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+--a.`INV #`,
+LTRIM(a.`INV #`, '0') AS `INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+--a.`Cust ID`,
+LTRIM(a.`Cust ID`, '0') AS `Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+--a.`Oracle ID`,
+LTRIM(a.`Oracle ID`, '0') AS `Oracle ID`,
+a.salesforce_billing_account,
+--a.`Bill Code`,
+LTRIM(a.`Bill Code`, '0') AS `Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.`Velocity Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+a.Cycle,
+a.Standard,
+a.QAA,
+a.SA,
+a.AAA 
+from FormulaTool120 a
+)
+, FormulaTool42 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+/*CASE 
+  WHEN SAFE.PARSE_DATE('%Y-%m-%d', a.Date) IS NOT NULL THEN SAFE.PARSE_DATE('%Y-%m-%d', a.Date)
+  WHEN SAFE.PARSE_DATE('%d/%m/%y', a.Date) IS NOT NULL THEN SAFE.PARSE_DATE('%d/%m/%y', a.Date)
+  WHEN SAFE.PARSE_DATE('%m/%d/%y', a.Date) IS NOT NULL THEN SAFE.PARSE_DATE('%m/%d/%y', a.Date)
+  WHEN SAFE.PARSE_DATE('%Y/%m/%d', a.Date) IS NOT NULL THEN SAFE.PARSE_DATE('%Y/%m/%d', a.Date)
+  ELSE NULL -- Return NULL if none of the formats match
+END AS Date,*/
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.`Velocity Storage Months` as Velocity,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+a.Cycle,
+a.Standard,
+a.QAA,
+a.SA,
+a.AAA 
+/*CASE 
+    WHEN SAFE.PARSE_DATE('%Y-%m-%d', `Storage Start Date`) IS NOT NULL THEN 'Format: YYYY-MM-DD'
+    WHEN SAFE.PARSE_DATE('%d/%m/%y', `Storage Start Date`) IS NOT NULL THEN 'Format: DD/MM/YY'
+    WHEN SAFE.PARSE_DATE('%m/%d/%y', `Storage Start Date`) IS NOT NULL THEN 'Format: MM/DD/YY'
+    WHEN SAFE.PARSE_DATE('%Y/%m/%d', `Storage Start Date`) IS NOT NULL THEN 'Format: YYYY/MM/DD'
+    ELSE 'Invalid Format'
+END AS `Retention Start Date`*/
+-- a.`Storage Start Date` as 'Storage Start Date' --	`Retention Start Date`
+from FormulaTool39 a
+)
+,
+FormulaTool414648 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.Velocity,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+-- a.`Storage Start Date`,
+DATE_TRUNC(a.`Storage Start Date`, MONTH) AS `Storage Start Date`,
+--a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+a.Cycle,
+a.Standard,
+a.QAA,
+a.SA,
+a.AAA,
+SUBSTR(a.`Year & Month`, 1, 4) AS `Year`,
+LAST_DAY(DATE_ADD(DATE_TRUNC(a.`Storage Start Date`, MONTH), INTERVAL (a.`Velocity` - 1) MONTH)) AS `Storage End Date`
+from FormulaTool42 a
+)
+,
+FilterTool75AnchorTrue as (
+select * from FormulaTool414648
+where Cycle != "Fixed" 
+)
+,FilterTool75AnchorFalse as (
+select * from FormulaTool414648
+where Cycle = "Fixed" 
+)
+,
+UnionTool390 as (
+select *, Null as Year from CreateCycleColumnTojoincustomeranchorJ
+
+union all
+
+select
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.Velocity,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+a.Cycle,
+a.`Year`
+from FilterTool75AnchorFalse a
+)
+
+--/////////////////////////////////////////////////////////////////////////////////////////////
+------------------------ Output to NA_Fixed Billing_Jun23-Aug23.csv ---------------------------------------
+
+-- select * from UnionTool390
+
+-----------------------------------------------------------------------------------------------
+--/////////////////////////////////////////////////////////////////////////////////////////////
+
+,
+FilterTool73AnchorTrue as (
+select * from FormulaTool414648
+where Cycle != "PxQ" 
+)
+,FilterTool73AnchorFalse as (
+select * from FormulaTool414648
+where Cycle = "PxQ" 
+)
+,FormulaTool106ContainerMonthlyCyclesToGetRate as(
+SELECT 
+    *,
+    DATE_TRUNC(a.`Storage Start Date`, MONTH) AS `Transaction Date`,
+    DATE_TRUNC(a.`Date`, MONTH) AS `Cycle Date`
+ from FilterTool73AnchorFalse a
+)
+,FormulaTool105104ContainerMonthlyCyclesToGetRate as (
+select
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.Velocity,
+a.Spend as Amount,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+--a.Cycle,
+CASE 
+    WHEN a.`Description` LIKE '%Minimum%' THEN 'Other Retention'
+    WHEN a.`Description` LIKE '%MNTHLY MN%' THEN 'Other Retention'
+    WHEN a.`Description` LIKE '%Miscellaneous%' THEN 'Other Retention'
+    WHEN a.`Storage Start Date` <= a.`Cycle Date` THEN 'MAR'
+    ELSE 'MAA'
+END AS `Cycle`,
+a.`Year`,
+a.`Transaction Date`
+from FormulaTool106ContainerMonthlyCyclesToGetRate a
+)
+
+,FilterTool108AnchorTrueContainerMonthlyCyclesToGetRate as (
+select * from FormulaTool105104ContainerMonthlyCyclesToGetRate
+where Cycle = "MAA" OR Cycle = "MAR"
+)
+
+,FilterTool108AnchorFalseContainerMonthlyCyclesToGetRate as (
+select * from FormulaTool105104ContainerMonthlyCyclesToGetRate
+where Cycle != "MAA" OR Cycle != "MAR"
+)
+
+,SummerizeTool109ContainerMonthlyCyclesToGetRate as (
+select Country,`Cust ID`, `Transaction Date`, sum(Amount) as Amount, sum(Activity) as Activity from FilterTool108AnchorTrueContainerMonthlyCyclesToGetRate
+Group By	Country,`Cust ID`, `Transaction Date`
+)
+
+,FormulaTool110ContainerMonthlyCyclesToGetRate as (
+select *, Amount/Activity as `Cube Price` from SummerizeTool109ContainerMonthlyCyclesToGetRate
+)
+, SummerizeTool92SortTool91 as (
+select Country, `Cust ID`, Date from FilterTool73AnchorTrue
+group by Country, `Cust ID`, Date 
+order by Country asc, `Cust ID` asc, Date asc 
+)
+, SampleTool93 as (
+SELECT 
+    Country, 
+    `Cust ID`, 
+    Date
+FROM (
+    SELECT 
+        Country, 
+        `Cust ID`, 
+        Date,
+        ROW_NUMBER() OVER (PARTITION BY Country, `Cust ID` ORDER BY Date ASC) AS row_num
+    FROM 
+        SummerizeTool92SortTool91
+)
+WHERE row_num = 1
+ORDER BY 
+    Country ASC, 
+    `Cust ID` ASC, 
+    Date ASC
+)
+, FilterTool95AnchorTrue as (
+select * from FilterTool73AnchorTrue
+where `Storage Start Date` is not null
+)
+
+, FormulaTool100 as (
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.Velocity,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+--a.`Storage End Date`,
+CASE 
+    WHEN a.`Storage End Date` > DATE_ADD(CURRENT_DATE(), INTERVAL 25 MONTH) THEN 
+        DATE_ADD(a.`Storage End Date`, INTERVAL 25 MONTH)
+    ELSE 
+        a.`Storage End Date`
+END AS `Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`,
+a.Cycle,
+a.Standard,
+a.QAA,
+a.SA,
+a.AAA,
+a`Year`,
+a.`Storage Start Date` AS Dates
+
+from FilterTool95AnchorTrue a
+)
+
+select * from FormulaTool100
+
+/*
+
+-- Recursive CTE for generating rows
+GenerateDates AS (
+    -- Initialization Step: Start with the first date
+    SELECT 
+                a.billing_system,
+    a.invoicing_country_code,
+    a.calendar_date,
+    a.Date,
+    a.`INV #`,
+    a.`Year & Month`,
+    a.Country,
+    a.Cluster,
+    a.Region,
+    a.`Cust ID`,
+    a.`Customer Name`,
+    a.IMGA,
+    a.GI,
+    a.sf_country_parent_id,
+    a.sf_country_parent_name,
+    a.`Oracle ID`,
+    a.salesforce_billing_account,
+    a.`Bill Code`,
+    a.Description,
+    a.Product,
+    a.`Business Line`,
+    a.bill_code_data_source,
+    a.`GL Account`,
+    a.`Service Type`,
+    a.`Rev Class`,
+    a.currency,
+    a.rate,
+    a.Activity,
+    --a.`Number of Storage Months`,
+    a.Velocity,
+    a.Spend,
+    a.rate_USD,
+    a.amount_USD,
+    a.unit_of_measure,
+    a.`Storage Start Date`,
+    a.`Storage End Date`,
+    a.`Original #INV`,
+    a.`Revenue Recognition Date`,
+    a.`Bill in Advance`,
+    a.`Bill in Advance month number`,
+    a.`Revenue Recognition Amount`,
+    a.Cycle,
+    a.Standard,
+    a.QAA,
+    a.SA,
+    a.AAA,
+    a`Year`,
+    a.Dates
+    FROM 
+        FormulaTool100 a
+    WHERE 
+        `Storage Start Date` <= `Storage End Date`
+
+    UNION ALL
+
+    -- Recursive Step: Increment by 1 month
+    SELECT
+        a.billing_system,
+    a.invoicing_country_code,
+    a.calendar_date,
+    a.Date,
+    a.`INV #`,
+    a.`Year & Month`,
+    a.Country,
+    a.Cluster,
+    a.Region,
+    a.`Cust ID`,
+    a.`Customer Name`,
+    a.IMGA,
+    a.GI,
+    a.sf_country_parent_id,
+    a.sf_country_parent_name,
+    a.`Oracle ID`,
+    a.salesforce_billing_account,
+    a.`Bill Code`,
+    a.Description,
+    a.Product,
+    a.`Business Line`,
+    a.bill_code_data_source,
+    a.`GL Account`,
+    a.`Service Type`,
+    a.`Rev Class`,
+    a.currency,
+    a.rate,
+    a.Activity,
+    --a.`Number of Storage Months`,
+    a.Velocity,
+    a.Spend,
+    a.rate_USD,
+    a.amount_USD,
+    a.unit_of_measure,
+    a.`Storage Start Date`,
+    a.`Storage End Date`,
+    a.`Original #INV`,
+    a.`Revenue Recognition Date`,
+    a.`Bill in Advance`,
+    a.`Bill in Advance month number`,
+    a.`Revenue Recognition Amount`,
+    a.Cycle,
+    a.Standard,
+    a.QAA,
+    a.SA,
+    a.AAA,
+    a`Year`,
+    DATE_ADD(Dates, INTERVAL 1 MONTH) AS Dates
+    FROM 
+        FormulaTool100 a
+    WHERE 
+        DATE_ADD(Dates, INTERVAL 1 MONTH) <= `Storage End Date`
+),
+
+
+-- Additional CTE referencing the generated rows
+GenerateRowsTool78 AS (
+    SELECT 
+        *,
+        FORMAT_DATE('%Y-%m', Dates) AS YearMonth -- Example: Extract Year-Month
+    FROM 
+  GenerateDates
+      ORDER BY 
+        Dates
+)
+
+
+-- Final Select
+ SELECT * FROM GenerateRowsTool78
+where `INV #` = 'JZJR920'
+
+*/
+
+
+-- Recursive CTE to generate rows
+,GenerateDates AS (
+    -- Initialization Step: Start with the first date
+    SELECT 
+        *,
+        `Storage Start Date` AS Dates
+    FROM 
+        FormulaTool100
+    WHERE 
+        `Storage Start Date` <= `Storage End Date`
+
+    UNION ALL
+
+    -- Recursive Step: Increment Dates by 1 month
+    SELECT 
+         a.billing_system,
+    a.invoicing_country_code,
+    a.calendar_date,
+    a.Date,
+    a.`INV #`,
+    a.`Year & Month`,
+    a.Country,
+    a.Cluster,
+    a.Region,
+    a.`Cust ID`,
+    a.`Customer Name`,
+    a.IMGA,
+    a.GI,
+    a.sf_country_parent_id,
+    a.sf_country_parent_name,
+    a.`Oracle ID`,
+    a.salesforce_billing_account,
+    a.`Bill Code`,
+    a.Description,
+    a.Product,
+    a.`Business Line`,
+    a.bill_code_data_source,
+    a.`GL Account`,
+    a.`Service Type`,
+    a.`Rev Class`,
+    a.currency,
+    a.rate,
+    a.Activity,
+    --a.`Number of Storage Months`,
+    a.Velocity,
+    a.Spend,
+    a.rate_USD,
+    a.amount_USD,
+    a.unit_of_measure,
+    a.`Storage Start Date`,
+    a.`Storage End Date`,
+    a.`Original #INV`,
+    a.`Revenue Recognition Date`,
+    a.`Bill in Advance`,
+    a.`Bill in Advance month number`,
+    a.`Revenue Recognition Amount`,
+    a.Cycle,
+    a.Standard,
+    a.QAA,
+    a.SA,
+    a.AAA,
+    DATE_ADD(a.Dates, INTERVAL 1 MONTH) AS Dates
+    FROM 
+         GenerateDates
+    WHERE 
+        DATE_ADD(Dates, INTERVAL 1 MONTH) <= `Storage End Date`
+)
+
+-- Final Query
+SELECT 
+    *,
+    FORMAT_DATE('%Y-%m', Dates) AS YearMonth
+FROM 
+    GenerateDates
+WHERE 
+    `INV #` = 'JZJR920'
+ORDER BY 
+    Dates
+
+
+
+--select * from FormulaTool100
+--where `INV #` = '9MW2529'
+
+
+-- select distinct(Cycle) from FilterTool75AnchorFalse
+
+
+
+
+/*
+
+select 
+a.billing_system,
+a.invoicing_country_code,
+a.calendar_date,
+a.Date,
+a.`INV #`,
+a.`Year & Month`,
+a.Country,
+a.Cluster,
+a.Region,
+a.`Cust ID`,
+a.`Customer Name`,
+a.IMGA,
+a.GI,
+a.sf_country_parent_id,
+a.sf_country_parent_name,
+a.`Oracle ID`,
+a.salesforce_billing_account,
+a.`Bill Code`,
+a.Description,
+a.Product,
+a.`Business Line`,
+a.bill_code_data_source,
+a.`GL Account`,
+a.`Service Type`,
+a.`Rev Class`,
+a.currency,
+a.rate,
+a.Activity,
+--a.`Number of Storage Months`,
+a.`Velocity Storage Months`,
+a.Spend,
+a.rate_USD,
+a.amount_USD,
+a.unit_of_measure,
+a.`Storage Start Date`,
+a.`Storage End Date`,
+a.`Original #INV`,
+a.`Revenue Recognition Date`,
+a.`Bill in Advance`,
+a.`Bill in Advance month number`,
+a.`Revenue Recognition Amount`
+*/
